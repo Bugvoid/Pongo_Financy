@@ -14,7 +14,6 @@ class ExpQuotesExtractor(BaseExtractor):
         self.list_expectation = []
         self.config = self.request_list('config')
         self.count_error = 0
-        self.list_commands_ecoinput = []
     
     @classmethod
     def name(self):

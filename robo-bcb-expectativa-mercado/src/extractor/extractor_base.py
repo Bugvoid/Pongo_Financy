@@ -74,49 +74,6 @@ class BaseExtractor(abc.ABC):
             logging.exception(f'Error while requesting list: "{list_name}" from: {robo_name}')
             raise
     
-    def get_company_id(self, exp):
-        return exp['config_type']['id_exp']
-        
-    def get_class_name(self, exp, is_ticker=False):
-        if 'reuniao' in exp:
-            reuniao = exp['reuniao'].split('/')
-            class_name = f'{reuniao[1]}{reuniao[0]}' if is_ticker else f'{reuniao[1]}-{reuniao[0]}'
-        elif 'datareferencia' in exp:
-            class_name = exp['datareferencia']
-            if len(class_name) > 5:
-                mes, ano = exp['datareferencia'].split('/')
-                if len(mes) == 1:
-                    class_name = f'{ano}T{mes}' if is_ticker else f'{ano}-T{mes}'
-                elif len(mes) == 2:
-                    class_name = f'{ano}{mes}' if is_ticker else f'{ano}-{mes}'
-        elif 'suavizada' in exp:
-            if '12Meses' in self.filename:
-                class_name = '12M' if is_ticker else '12 Meses'    
-            elif '24Meses' in self.filename:
-                class_name = '24M' if is_ticker else '24 Meses'
-            else:
-                self.count_error += 1
-                logging.warning(f'Class creation failed to expectation type: {exp}')        
-        else:
-            self.count_error += 1
-            logging.warning(f'Class creation failed to expectation type: {exp}')
-        
-        return class_name
-    
-    def get_ticker(self, exp):
-        ticker = f"{self.get_company_id(exp)}{self.get_class_name(exp, True)}"
-        if 'basecalculo' in exp:
-            ticker += self.config['base_calculo'][exp['basecalculo']]
-        elif 'tipocalculo' in exp:
-            ticker += exp['tipocalculo']
-        
-        if 'suavizada' in exp:
-            ticker += exp['suavizada']
-        elif 'indicadordetalhe' in exp and exp['indicadordetalhe']:
-            ticker += exp['indicadordetalhe'][0]
-        
-        return self.clean_characters(ticker)
-    
     def clean_characters(self, text):
         text = unicodedata.normalize('NFD', text)
         text = text.encode('ascii','ignore').decode('utf-8')
