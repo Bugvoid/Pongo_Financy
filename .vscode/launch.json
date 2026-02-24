@@ -1,0 +1,132 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+        {
+            "name": "EXPECTATIVAS:Download",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}\\src\\download.py",
+            "console": "integratedTerminal",
+            "args": [
+                // "--data_ini","",
+                // "--data_fim","",
+                "--qtd_dias","7",
+                "--nomes_pacotes","ExpectativaMercadoMensais,ExpectativasMercadoSelic,ExpectativasMercadoTrimestrais,ExpectativasMercadoAnuais,ExpectativasMercadoInflacao12Meses,ExpectativasMercadoInflacao24Meses, ExpectativasMercadoTop5Mensais, ExpectativasMercadoTop5Selic, ExpectativasMercadoTop5Anuais",
+                "--max_entid","1000",
+                "--base_url","https://olinda.bcb.gov.br/olinda/servico/Expectativas/versao/v1/odata",
+                "--output_path", "${workspaceFolder}\\jobs\\download",
+                "--bkp_path", "${workspaceFolder}\\jobs\\backup",
+                "--api_stage", "dev",
+                "--api_base", "",
+                "--api_version", "1",
+                "--api_region", "sa-east-1",
+                "--api_timeout_secs", "60",
+                "--force_download", "N"
+            ]
+        },
+        {
+            "name": "NOTICIAS:Download",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}\\src\\download.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--data_ini","2025-10-06",
+                "--data_fim","2025-10-06",
+                "--id_agencia","18", //Noticias: 18-Empresas, 15-Indices, 17-Renda Variavel, 20-Derivativos
+                "--id_key","PROVENTOS", //PROVENTOS, INDICES
+                "--file_prefix","CorporateActions", //Corporate
+                "--output_path", "${workspaceFolder}\\jobs\\download",
+                "--bkp_path", "${workspaceFolder}\\jobs\\backup",
+                "--force_download", "N"
+            ]
+        },
+        {
+            "name": "CRI: download",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/download.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--file_prefix","CRI", 
+                "--id_tipo_fundo","5", // 5=CRI
+                "--id_categoria_doc","6", // categoria informes periodicos
+                "--id_tipo_doc","86", // 86 = informe mensal de CRI (Anexo 32, II ICVM 480)
+                //"--identificador","BRTSSACRI0K0",
+                "--data_de","2022-04-18", 
+                "--data_ate","2022-04-18",
+                "--output_path", ".\\teste\\download",
+                //"-bucket_prefix", "mensal/full",
+                //"-bucket", "robo-cri-informe-dev",
+                //"--fundos_file",".\\teste\\FundosPraImpBalprn.txt"
+            ]
+        },
+        {
+            "name": "IBGE:Download",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}\\src\\download.py",
+            "console": "integratedTerminal",
+            "args": [
+                // "--id_table","",
+                // "--fields","",
+                // "--id_group","",
+                // "--category_group","",
+                // "--period","",
+                "--base_url","https://apisidra.ibge.gov.br",
+                "--output_path", "${workspaceFolder}\\jobs\\download",
+                "--bkp_path", "${workspaceFolder}\\jobs\\backup",
+                "--api_stage", "dev",
+                "--api_base", "",
+                "--api_version", "1",
+                "--api_region", "sa-east-1",
+                "--api_timeout_secs", "60",
+                "--force_download", "S"
+            ]
+        },
+        {
+            "name": "IPEA:Download",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}\\src\\download.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--data_ini","2025-01-01",
+                "--data_fim","2025-10-27",
+                "--qtd_mes","2",
+                "--id_macro","",
+                "--base_url","https://www.ipeadata.gov.br/api/odata4/Metadados",
+                "--output_path", "${workspaceFolder}\\jobs\\download",
+                "--bkp_path", "${workspaceFolder}\\jobs\\backup",
+                "--api_stage", "dev",
+                "--api_base", "",
+                "--api_version", "1",
+                "--api_region", "sa-east-1",
+                "--api_timeout_secs", "60",
+                "--force_download", "S"
+            ]
+        },
+        {
+            "name": "FNET: robo_download_fundo_bra_fnet",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/robo_download_fundo_bra_fnet.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--file_prefix","FII", // FII, FIDC
+                "--id_tipo_fundo","1", // 1=FII, 2=FIDC
+                "--id_categoria_doc","6", // categoria informes periodicos
+                "--id_tipo_doc","45", // 40=informe mensal, 45=informe trimestral, 47=informe anual
+                "--cnpj","12989974000129",
+                "--data_de","2020-08-06", //data para dados trimestral
+                "--data_ate","2020-08-06",
+                "-bucket_prefix", "trimestral/full", //"mensal/full", "trimestral/full"
+                "-bucket", "robo-fii-informe-dev",
+                "--cnpj_com_separadores"
+            ]
+        }
+  ]
+}

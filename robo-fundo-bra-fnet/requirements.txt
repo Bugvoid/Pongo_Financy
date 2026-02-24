@@ -1,0 +1,6 @@
+requests
+urllib3
+boto3
+lxml
+python-dateutil
+aws-requests-auth
