@@ -1,0 +1,18 @@
+{
+  "listademacroeconomicos": {
+    "items": [
+      {
+        "cod_ipea": "GM366_ERC366"
+      },
+      {
+        "cod_ipea": "BM12_TJOVER12"
+      },
+      {
+        "cod_ipea": "EIA366_PBRENT366"
+      },
+      {
+        "cod_ipea": "GM366_IBVSP366"
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "table": [
+    {
+      "id": "7060",
+      "name": "IPCA",
+      "fields": "63,69,2265",
+      "group": {
+        "id": "c315",
+        "category": "7169"
+      }
+    },
+    {
+      "id": "7063",
+      "name": "INPC",
+      "fields": "44,68,2292",
+      "group": {
+        "id": "c315",
+        "category": "7169"
+      }
+    }
+  ]
+}

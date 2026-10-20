@@ -1,0 +1,13 @@
+{
+  "pacotes": [
+    "ExpectativaMercadoMensais",
+    "ExpectativasMercadoSelic",
+    "ExpectativasMercadoTrimestrais",
+    "ExpectativasMercadoAnuais",
+    "ExpectativasMercadoInflacao12Meses",
+    "ExpectativasMercadoInflacao24Meses",
+    "ExpectativasMercadoTop5Mensais",
+    "ExpectativasMercadoTop5Selic",
+    "ExpectativasMercadoTop5Anuais"
+  ]
+}
