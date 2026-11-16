@@ -13,6 +13,7 @@ import time
 import random
 from retrying import retry
 import re
+import html
 
 urllib3.disable_warnings()
 
@@ -21,8 +22,11 @@ URL_PLANTAO_NOTICIAS = 'https://sistemasweb.b3.com.br/PlantaoNoticias/Noticias/L
 # https://sistemasweb.b3.com.br/PlantaoNoticias/Noticias/ListarTitulosNoticias?agencia=18&palavra=Proventos&dataInicial=2025-07-01&dataFinal=2025-07-11
 URL_DOWNLOAD_NOTICIA = 'https://sistemasweb.b3.com.br/PlantaoNoticias/Noticias/Detail'
 #https://sistemasweb.b3.com.br/PlantaoNoticias/Noticias/Detail?idNoticia=3002381&agencia=18&dataNoticia=2025-07-11%2009:50:11
-MAX_RESULT_API = 50
 EXTENSAO = 'txt'
+TIMEOUT = (15, 120)  # (conexão, leitura) em segundos
+# A API devolve tudo de uma vez (sem paginação) e responde corpo vazio
+# quando o período passa de ~92 dias.
+MAX_DIAS_PERIODO = 90
 
 def parse_command_line():
     parser = argparse.ArgumentParser(
@@ -73,8 +77,11 @@ def parse_command_line():
     parser.add_argument(
         "-f", "--force_download",
         required=False,
+        nargs='?',
+        const=True,
+        default=False,
         type=valid_boolean,
-        help='Força download já processados anteriormente'
+        help='Força download já processados anteriormente (-f ou -f S)'
     )
     
     return parser.parse_args()
@@ -87,11 +94,14 @@ def valid_date(s):
         raise argparse.ArgumentTypeError(msg)
 
 def valid_boolean(s):
-    try:
-        return True if s == 'S' else False 
-    except ValueError:
-        msg = "Parâmetro de boolean inválida!: '{0}'.".format(s)
-        raise argparse.ArgumentTypeError(msg)
+    if isinstance(s, bool):
+        return s
+    v = str(s).strip().upper()
+    if v in ('S', 'SIM', 'Y', 'YES', 'TRUE', '1'):
+        return True
+    if v in ('N', 'NAO', 'NÃO', 'NO', 'FALSE', '0'):
+        return False
+    raise argparse.ArgumentTypeError("Parâmetro de boolean inválido!: '{0}'. Use S ou N.".format(s))
 
 def validate_args(args):
     result = True
@@ -107,9 +117,15 @@ def validate_args(args):
     if not ok:
         result = False
 
-    ok, _ = get_data_fim(args)
+    ok, data_fim = get_data_fim(args)
     if not ok:
+        logging.error('data_fim menor que data_ini (ou data_ini no futuro sem data_fim)')
         result = False
+    else:
+        _, data_ini = get_data_ini(args)
+        if (data_fim - data_ini).days > MAX_DIAS_PERIODO:
+            logging.error(f'Período de {(data_fim - data_ini).days} dias: a B3 só responde até ~{MAX_DIAS_PERIODO} dias por consulta')
+            result = False
 
     return result
 
@@ -136,7 +152,7 @@ def write_file(text, filename):
 def already_process_file(args, filename):
     bkp_filename = os.path.join(args.bkp_path, filename)
     if os.path.isfile(bkp_filename) and (not args.force_download):
-        return os.stat(bkp_filename).st_size >= 5000
+        return os.stat(bkp_filename).st_size > 0
     return False
 
 def nome_arquivo(prefix, id_noticia, data_pub):
@@ -207,7 +223,11 @@ def match(text):
 @retry(wait_fixed=10000,  # espera máxima de 10 segundos
        stop_max_attempt_number=10)  # tenta até 10 vezes
 def _get_with_retry(session, url, **kwargs):
-    return session.get(url, **kwargs)
+    kwargs.setdefault('timeout', TIMEOUT)
+    resp = session.get(url, **kwargs)
+    if resp.status_code >= 500:
+        raise requests.HTTPError(f'{resp.status_code} em {url}')  # dispara nova tentativa
+    return resp
 
 
 def get_session():
@@ -220,117 +240,105 @@ def get_session():
     else:
         return None, None
     
-def get_json_download(args):
-    result = {
-        'data': []
-    }
+def get_json_download(args, session):
+    """A API não pagina: uma chamada traz todos os itens do período."""
+    result = {'data': []}
 
-    start = 0  # paginacao
-    continua = True
+    json_request = make_params_request(args)
+    resp_json = _get_with_retry(
+        session,
+        URL_PLANTAO_NOTICIAS,
+        verify=False, headers=make_api_headers(), params=json_request
+    )
 
-    session, resp = get_session()
+    if resp_json.status_code != 200:
+        raise Exception(f'Listagem retornou status {resp_json.status_code}. request: {json_request}')
 
-    if session and resp:
-        recordsTotal = 0
-        data = None
-        while continua:
-            # Adiciona um atraso aleatório entre as requisições para não ser bloqueado
-            time.sleep(random.randint(0, 3))
+    if not resp_json.text.strip():
+        raise Exception(f'Listagem retornou corpo vazio (período longo demais?). request: {json_request}')
 
-            json_request = make_params_request(args)
-            req_header = make_api_headers()
-            resp_json = _get_with_retry(
-                session,
-                URL_PLANTAO_NOTICIAS,
-                verify=False, headers=req_header, params=json_request
-            )
+    try:
+        data = json.loads(resp_json.text)
+    except ValueError as xcp:
+        raise Exception(f'Listagem não retornou JSON válido: {resp_json.text[:200]!r}') from xcp
 
-            if resp_json.status_code == 200:
-                data = json.loads(resp_json.text)
-                
-                if not data:
-                    continua = False
-                    logging.warning(f'Pagina não retornou dados para o filtro: {args}')
-                    return result
+    if not data:
+        logging.warning(f'Pesquisa não encontrou dados para o filtro: {json_request}')
+        return result
 
-                if data and len(data) > 0:
-                    recordsTotal = len(data)
-                    result['data'].extend(data)
-            else:
-                continua = False
-                logging.error(f'Erro ao pegar json da paginação atual. request: {json_request}, args: {args}')
-                return result
+    vistos = set()
+    for item in data:
+        id_noticia = item['NwsMsg']['id']
+        if id_noticia not in vistos:
+            vistos.add(id_noticia)
+            result['data'].append(item)
 
-            if recordsTotal > MAX_RESULT_API:
-                if start < recordsTotal:
-                    start = (start + MAX_RESULT_API)
-            else:
-                logging.info(f'Tentou-se extrair {recordsTotal} itens para download.')
-                continua = False
-    else:
-        logging.error('Erro ao iniciar pagina da sessao e cookies.')
-
-    if not result['data']:
-        logging.warning(f'Pesquisa não encontrou dados para argumentos: {args}, start {start}.')
-
+    logging.info(f'{len(result["data"])} notícias encontradas para download.')
     return result
 
 def download(args):
-    if validate_args(args):
+    """Retorna a quantidade de notícias que falharam."""
+    if not validate_args(args):
+        raise Exception('Argumentos invalidos!')
+
+    session, _ = get_session()
+    if not session:
+        raise Exception('Erro ao iniciar pagina da sessao e cookies.')
+
+    lista_para_download = get_json_download(args, session)
+
+    falhas = 0
+    for download_item in lista_para_download['data']:
+        noticia = download_item['NwsMsg']
+        arquivo = nome_arquivo(
+            args.file_prefix,
+            noticia['id'],
+            datetime.datetime.strptime(noticia['dateTime'], "%Y-%m-%d %H:%M:%S")
+        )
+        if already_process_file(args, arquivo):
+            logging.info(f'Noticia já foi baixada {arquivo}')
+            continue
+
+        # Pausa aleatória entre downloads para não ser bloqueado
+        time.sleep(random.uniform(0.5, 2))
         try:
-            lista_para_download = get_json_download(args)
+            response = _get_with_retry(
+                session,
+                URL_DOWNLOAD_NOTICIA,
+                params={'idNoticia': noticia['id'], 'agencia': noticia['IdAgencia'], 'dataNoticia': noticia['dateTime']},
+                verify=False,
+                headers=make_api_headers()
+            )
         except Exception as xcp:
-            raise(f'Except durante o download do arquivo, Exception: {xcp}')
+            logging.error(f'Falha no download da notícia {noticia["id"]}: {xcp}')
+            falhas += 1
+            continue
 
-        if (lista_para_download is not None) and lista_para_download['data'] and len(lista_para_download['data']) > 0:
-            session, _ = get_session()
-            for download_item in lista_para_download['data']:
-                arquivo = nome_arquivo(
-                    args.file_prefix,
-                    download_item['NwsMsg']['id'],
-                    datetime.datetime.strptime(download_item['NwsMsg']['dateTime'], "%Y-%m-%d %H:%M:%S")
-                )
-                if already_process_file(args, arquivo):
-                    logging.info(f'Noticia já foi baixada {arquivo}')
-                    continue
-                    
-                req_header = make_api_headers()
-                try:
-                    response = _get_with_retry(
-                        session,
-                        URL_DOWNLOAD_NOTICIA,
-                        params={'idNoticia': download_item['NwsMsg']['id'],'agencia':download_item['NwsMsg']['IdAgencia'],'dataNoticia': download_item['NwsMsg']['dateTime']},
-                        verify=False,
-                        headers=req_header
-                    )
-                except Exception as xcp:
-                    raise(f'Except durante o download do arquivo URL:{URL_DOWNLOAD_NOTICIA}, download_item["id"]: {download_item["id"]}, Exception: {xcp}')
+        if response.status_code != 200:
+            logging.warning('Notícia %s: status code %s', noticia['id'], response.status_code)
+            falhas += 1
+            continue
 
-                if not(response is None):
-                    if (response.status_code == 200):
-                        logging.info(f'Retorno ok, gerando o arquivo {arquivo}')
-                        m = match(response.text)
-                        write_file(
-                            m.group('text'),
-                            os.path.join(
-                                args.output_path,
-                                arquivo
-                            )
-                        )
-                    else:
-                        logging.warning('Response com status code: %s %s', response.status_code, response)
-                else:
-                    logging.warning('Response None "%s"', response)
-        else:
-            logging.warning('Erro ao obter lista_para_download:%s', (lista_para_download is not None) and lista_para_download['data'] and len(lista_para_download['data']) > 0)
-    else:
-        raise Exception(f'Argumentos invalidos!')
+        m = match(response.text)
+        if not m:
+            logging.warning('Notícia %s: página sem bloco <pre>, nada gravado', noticia['id'])
+            falhas += 1
+            continue
+
+        logging.info(f'Retorno ok, gerando o arquivo {arquivo}')
+        write_file(html.unescape(m.group('text')), os.path.join(args.output_path, arquivo))
+
+    return falhas
 
 
 if __name__ == '__main__':
     try:
         configureLogging()
         args = parse_command_line()
-        download(args)
+        falhas = download(args)
     except Exception as Ex:
         logging.exception(f'An unexpected exception was raised: {Ex}')
+        sys.exit(1)
+    if falhas:
+        logging.error(f'{falhas} notícia(s) não foram baixadas')
+        sys.exit(2)
